@@ -1,49 +1,118 @@
 <template>
-  <div class="container mx-auto p-4 text-black">
-    <DropdownList 
-      :items="provinces" 
-      placeholder="Pilih Provinsi" 
-      @select="setProvinceId" 
-    />
-    <DropdownList 
-      v-if="provinceId" 
-      :items="cities" 
-      placeholder="Pilih Kota" 
-      @select="setCityId" 
-    />
-    <DropdownList 
-      v-if="provinceId && cityId" 
-      :items="hospitals" 
-      placeholder="Pilih Rumah Sakit" 
-      @select="setHospitalId" 
-    />
-    
-    <div v-if="hospitalId">
-      <BedDetail :hospitalId="hospitalId" />
-      <div v-if="bedDetail">
-        <h3 class="text-lg font-bold">Detail Kapasitas Kasur</h3>
-        <p><strong>Nama Rumah Sakit:</strong> {{ bedDetail.name }}</p>
-        <p><strong>Alamat:</strong> {{ bedDetail.address }}</p>
-        <p><strong>Telepon:</strong> {{ bedDetail.phone }}</p>
-        <p><strong>Total Bed:</strong> {{ bedDetail.bed_availability }}</p>
-        <p><strong>Available Bed:</strong> {{ bedDetail.bed_empty }}</p>
+  <div class="min-h-screen bg-gray-50 p-4 md:p-8">
+    <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-sm">
+      <!-- Header -->
+      <div class="p-6 border-b border-gray-100">
+        <h1 class="text-2xl font-bold text-center text-gray-900">
+          Cek Ketersediaan Tempat Tidur
+        </h1>
       </div>
-      <div v-if="hospitalMap">
-        <h3 class="text-lg font-bold">Peta Rumah Sakit</h3>
-        <img :src="hospitalMap.map_url" alt="Peta Rumah Sakit" class="w-full h-auto" />
+
+      <!-- Selection Area -->
+      <div class="p-6 space-y-4">
+        <div class="grid gap-4 text-black">
+          <!-- Province Dropdown -->
+          <div>
+            <DropdownList
+              :items="provinces"
+              placeholder="Pilih Provinsi"
+              class="w-full"
+              @select="handleProvinceSelect"
+            />
+          </div>
+
+          <!-- City Dropdown -->
+          <div v-if="provinceId">
+            <DropdownList
+              :items="cities"
+              placeholder="Pilih Kota"
+              class="w-full"
+              @select="handleCitySelect"
+            />
+          </div>
+
+          <!-- Hospital Dropdown -->
+          <div v-if="provinceId && cityId">
+            <DropdownList
+              :items="hospitals"
+              placeholder="Pilih Rumah Sakit"
+              class="w-full"
+              @select="handleHospitalSelect"
+            />
+          </div>
+        </div>
+
+        <!-- Hospital Details -->
+        <div v-if="hospitalId && bedDetail" class="mt-8 space-y-6">
+          <!-- Hospital Info Card -->
+          <div class="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+            <div class="flex items-center gap-3">
+              <i class="fas fa-hospital text-blue-500"></i>
+              <span class="font-medium">{{ bedDetail.name }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <i class="fas fa-map-marker-alt text-blue-500"></i>
+              <span class="text-gray-600">{{ bedDetail.address }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <i class="fas fa-phone text-blue-500"></i>
+              <span class="text-gray-600">{{ bedDetail.phone }}</span>
+            </div>
+          </div>
+
+          <!-- Bed Availability Stats -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Available Beds -->
+            <div class="bg-green-50 rounded-lg p-6">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <i class="fas fa-bed text-green-600"></i>
+                  <span class="font-medium text-green-900">Tersedia</span>
+                </div>
+                <span class="text-2xl font-bold text-green-600">
+                  {{ bedDetail.bed_empty }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Total Beds -->
+            <div class="bg-blue-50 rounded-lg p-6">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <i class="fas fa-bed text-blue-600"></i>
+                  <span class="font-medium text-blue-900">Total</span>
+                </div>
+                <span class="text-2xl font-bold text-blue-600">
+                  {{ bedDetail.bed_availability }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Map -->
+          <div v-if="hospitalMap" class="bg-white rounded-lg border border-gray-200 p-6 text-black">
+            <h3 class="text-lg font-semibold mb-4">Lokasi Rumah Sakit</h3>
+            <img 
+              :src="hospitalMap.map_url" 
+              alt="Peta Rumah Sakit" 
+              class="w-full h-64 object-cover rounded-lg"
+            />
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import DropdownList from '../components/molecules/DropdownList.vue'; // Import DropdownList component
-import BedDetail from '../components/molecules/BedDetail.vue'; // Import BedDetail component
-import axios from 'axios'; // Import axios for API calls
+import axios from 'axios';
+import DropdownList from '../components/molecules/DropdownList.vue';
 
 export default {
-  name: 'ListRS',
-  components: { DropdownList, BedDetail },
+  name: 'HospitalFinder',
+  components: {
+    DropdownList,
+  },
   data() {
     return {
       provinces: [],
@@ -52,85 +121,124 @@ export default {
       provinceId: null,
       cityId: null,
       hospitalId: null,
-      bedDetail: null, // Menyimpan detail kapasitas kasur
-      hospitalMap: null, // Menyimpan data peta rumah sakit
+      bedDetail: null,
+      hospitalMap: null,
+      loading: false,
+      error: null,
     };
   },
   created() {
-    this.fetchProvinces(); // Fetch provinces when the component is created
+    this.fetchProvinces();
   },
   methods: {
+    // Fetch Data Methods
     async fetchProvinces() {
+      this.loading = true;
       try {
-        const response = await axios.get('https://rs-bed-covid-api.vercel.app/api/get-provinces');
-        this.provinces = response.data.provinces; // Store provinces in the state
+        const { data } = await axios.get('https://rs-bed-covid-api.vercel.app/api/get-provinces');
+        this.provinces = data.provinces;
       } catch (error) {
-        console.error('Error fetching provinces:', error); // Handle error
+        this.error = 'Gagal memuat data provinsi';
+        console.error('Error fetching provinces:', error);
+      } finally {
+        this.loading = false;
       }
     },
+
     async fetchCities() {
-      if (!this.provinceId) return; // Return if provinceId is not set
+      if (!this.provinceId) return;
+      this.loading = true;
       try {
-        const response = await axios.get(`https://rs-bed-covid-api.vercel.app/api/get-cities?provinceid=${this.provinceId}`);
-        this.cities = response.data.cities; // Store cities in the state
+        const { data } = await axios.get(`https://rs-bed-covid-api.vercel.app/api/get-cities`, {
+          params: { provinceid: this.provinceId }
+        });
+        this.cities = data.cities;
       } catch (error) {
-        console.error('Error fetching cities:', error); // Handle error
+        this.error = 'Gagal memuat data kota';
+        console.error('Error fetching cities:', error);
+      } finally {
+        this.loading = false;
       }
     },
+
     async fetchHospitals() {
-      if (!this.provinceId || !this.cityId) return; // Return if either provinceId or cityId is not set
+      if (!this.provinceId || !this.cityId) return;
+      this.loading = true;
       try {
-        const response = await axios.get(`https://rs-bed-covid-api.vercel.app/api/get-hospitals?provinceid=${this.provinceId}&cityid=${this.cityId}&type=1`);
-        this.hospitals = response.data.hospitals; // Store hospitals in the state
+        const { data } = await axios.get(`https://rs-bed-covid-api.vercel.app/api/get-hospitals`, {
+          params: {
+            provinceid: this.provinceId,
+            cityid: this.cityId,
+            type: 1
+          }
+        });
+        this.hospitals = data.hospitals;
       } catch (error) {
-        console.error('Error fetching hospitals:', error); // Handle error
+        this.error = 'Gagal memuat data rumah sakit';
+        console.error('Error fetching hospitals:', error);
+      } finally {
+        this.loading = false;
       }
     },
-    async fetchBedDetail() {
+
+    async fetchHospitalDetails() {
       if (!this.hospitalId) return;
+      this.loading = true;
       try {
-        const response = await axios.get(`https://rs-bed-covid-api.vercel.app/api/get-bed-detail?hospitalid=${this.hospitalId}`);
-        console.log(response.data);  // Tambahkan log respons untuk debugging
-        this.bedDetail = response.data.data; // Simpan data bed detail sesuai struktur respons API
+        const [bedResponse, mapResponse] = await Promise.all([
+          axios.get(`https://rs-bed-covid-api.vercel.app/api/get-bed-detail`, {
+            params: { hospitalid: this.hospitalId, type: 1 }
+          }),
+          axios.get(`https://rs-bed-covid-api.vercel.app/api/get-hospital-map`, {
+            params: { hospitalid: this.hospitalId }
+          })
+        ]);
+        
+        this.bedDetail = bedResponse.data;
+        this.hospitalMap = mapResponse.data;
       } catch (error) {
-        console.error('Error fetching bed detail:', error);
+        this.error = 'Gagal memuat detail rumah sakit';
+        console.error('Error fetching hospital details:', error);
+      } finally {
+        this.loading = false;
       }
     },
-    async fetchHospitalMap() {
-      if (!this.hospitalId) return;
-      try {
-        const response = await axios.get(`https://rs-bed-covid-api.vercel.app/api/get-hospital-map?hospitalid=5171133`);
-        this.hospitalMap = response.data;
-        if (!this.hospitalMap || !this.hospitalMap.map_url) {
-          console.error("Hospital map data is unavailable for this hospitalId.");
-        }
-      } catch (error) {
-        console.error("Error fetching hospital map:", error);
-        this.hospitalMap = null;
-      }
-    },
-    setProvinceId(id) {
-      this.provinceId = id; // Set provinceId
-      this.cityId = null; // Reset cityId and hospitalId
+
+    // Event Handlers
+    handleProvinceSelect(id) {
+      this.provinceId = id;
+      this.cityId = null;
       this.hospitalId = null;
-      this.fetchCities(); // Fetch cities based on selected province
+      this.bedDetail = null;
+      this.hospitalMap = null;
+      this.fetchCities();
     },
-    setCityId(id) {
-      this.cityId = id; // Set cityId
-      this.hospitalId = null; // Reset hospitalId
-      this.fetchHospitals(); // Fetch hospitals based on selected city
+
+    handleCitySelect(id) {
+      this.cityId = id;
+      this.hospitalId = null;
+      this.bedDetail = null;
+      this.hospitalMap = null;
+      this.fetchHospitals();
     },
-    setHospitalId(id) {
-      this.hospitalId = id; // Set hospitalId
-      this.fetchBedDetail(); // Fetch bed detail when hospital is selected
-      this.fetchHospitalMap(); // Fetch hospital map when hospital is selected
+
+    handleHospitalSelect(id) {
+      this.hospitalId = id;
+      this.fetchHospitalDetails();
     },
   },
 };
 </script>
 
-<style scoped>
-.container {
-  max-width: 800px; /* Atur lebar maksimum kontainer */
+<style>
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css');
+
+/* Additional custom styles can be added here if needed */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 </style>
